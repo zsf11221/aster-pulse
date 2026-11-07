@@ -60,3 +60,12 @@
 5. **长时间运行**：后台刷新只观察了约 2 分钟（markets/announcements/activities 各刷
    2 次成功，buyback 1 次成功）；24 小时稳定性、缓存文件增长、磁盘占用待上线后观察。
 6. **Certbot HTTPS**：需真实域名解析到服务器后才能签发，本地无法验证。
+
+## 2026-11-07 补充：/api/token-stats + 邀请链接（commit 待填）
+
+- 新增 `GET /api/token-stats`：价格取 fapi `ticker/24hr?symbol=ASTERUSDT`（永续价，TTL 30s）；质押取 DefiLlama `api.llama.fi/protocol/aster` 的 staking 系列最新点美元值 ÷ 现价换算（TTL 300s）。实测 2026-11-07 16:24 CST：冷启动 4.37s，价格 0.6801 USDT、24h -0.57%，质押 512,064,280 ASTER（约 $348.25M，DefiLlama 快照时间 2026-11-07）；命中缓存 17ms。价格与同分钟直接 curl fapi（0.67990 / -0.556%）一致（价差为分钟内波动）。
+- 质押口径说明：官方质押页 https://www.asterdex.com/zh-CN/staking 是 JS 单页，页面本身公开、无需登录，显示各验证者质押量之和；但其质押路由 JS 在本机直接拉取返回 403，官方 tapi 也无全局查询方法（实测 `aster_getValidators` → -32601 Method not found，`aster_getBalance` 的 totalStakedAmount 是按地址的个人质押）。因此质押数用 DefiLlama 换算值，接口和页面小字都写明了来源，未冒充官方数。veASTER 总量未接入（veASTER 是锁仓量×时间权重，不是代币总量，官方未公布）。
+- 前端：回购卡片内新增两指标（ASTER 当前价格、 全网质押），每 30s 刷新；失败时显示旧缓存并标“缓存·更新延迟”，无缓存才显示“暂未接入”。
+- 右上角“打开 Aster”按钮 href 改为 https://www.aster.finance/zh-CN/referral/6e1d28（target=_blank、rel=noopener 保留）；本地首页实测：该链接恰好 1 处，旧交易链接 0 处，其余 9 处官方链接、公告链接、官方机制链接均未动；首页 0 处 fonts.googleapis.com。
+- `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3100）全部通过；/api/detail?symbol=BTCUSDT 502 为原站已知行为。
+- 未验证：新接口的断网 stale 回退未单独实测（与原有接口共用同一 cached()，此前已验证）；服务器上尚未同步、DNS 未切、国内访问未测。
