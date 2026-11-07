@@ -64,11 +64,12 @@
 | `package.json` | `npm start` / `npm run check`（零依赖） |
 | `Dockerfile` | Node 20 Alpine 镜像 |
 | `docker-compose.yml` | 容器 + `127.0.0.1:3000` + `./data` 挂载 + 健康检查 |
-| `nginx.conf` | Nginx：`/` 与 `/api/` 反代到 Node，`/api/` 超时 180s |
+| `nginx.conf` | Nginx：`/` 与 `/api/` 反代到 Node，`/api/` 超时 180s；`/status/`、`/assets/`、`/socket.io/` 反代到 Uptime Kuma（见 MONITORING.md） |
 | `aster-pulse.service` | systemd 单元（不用 Docker 时用） |
 | `deploy.sh` | 服务器一键部署脚本（Docker 或 `MODE=systemd`） |
 | `scripts/check-local.sh` | 服务器本机验收脚本 |
-| `.env.example` | 环境变量模板（`PORT` / `CACHE_DIR` / `REFRESH_TOKEN`） |
+| `.env.example` | 环境变量模板（`PORT` / `CACHE_DIR` / `REFRESH_TOKEN`；另有 Uptime Kuma 通知占位变量，未接通） |
+| `MONITORING.md` | Uptime Kuma 监控说明：监控项清单、状态页、通知接线、服务器同步步骤 |
 | `data/cache/` | 磁盘缓存目录（空目录，运行时自动生成 `.json`） |
 | `VERIFICATION.md` | 本地实测记录 |
 

@@ -21,3 +21,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Uptime Kuma：本站监控（监控项 + 公开状态页 + 告警），与 aster-pulse 同机运行
+  # 镜像版本（2026-11-07 在 Docker Hub 核实）：最新 2.x 为 2.5.9（2026-10-31 发布，
+  # digest sha256:e88415a90dd2f7efecdbc18de0490aff292764a3ac471531bf1d0481725591bd）；
+  # :1 / :latest 仍指向 1.23.17，且 1.x 已不再更新，故不用 :1，改钉 2.5.9。
+  # 端口只绑 127.0.0.1:3001，不直接暴露公网；公网经 Nginx /status/ 看状态页（见 nginx.conf）。
+  # 数据（监控历史、账号、状态页配置）存在 ./data/uptime-kuma，删了就丢，不要清 data 目录。
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.5.9
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ./data/uptime-kuma:/app/data
