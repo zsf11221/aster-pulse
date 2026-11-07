@@ -142,3 +142,18 @@
 3. **X 开发者后台用量/账单**：未打开后台核对本次 2 次调用的计费与剩余额度；
    上面费用数字是按公开单价算的理论值，以后台为准。
 4. **真机移动端**：未验。
+
+### 中英文切换（2026-11-07）
+
+- 右上角 `EN` / `中文` 按钮，默认中文，`localStorage`（`aster-pulse-lang`）存选择；
+  无头 Chrome（Chrome for Testing）实测：点切换后 `documentElement.lang` 变
+  `en-US`、标题/导航/回购区/社区区/搜索框全部变英文，刷新后仍是英文，再点回中文正常。
+- `node --check`（`app/worker.js` + `reference/client.js`）通过；内嵌 CLIENT 与
+  `reference/client.js` 逐字节一致（Node 求值 + 对比）；`npm test` 7/7；
+  `check-local.sh` 全部通过；本地服务首页 200（24KB，含切换按钮与中文默认文案）、
+  `/client.js` 200（与 `reference/client.js` 一致，含英文翻译表）。
+- 桌面 1280px 中英文截图、手机 390px 截图均看过：无重叠、无裁切，英文导航两行显示正常。
+- 中文默认文案与改前逐字一致（字典 zh 值全部在原 HTML/CLIENT 里核对过）；数字、价格、
+  链接、邀请链接、`server.js` 未动。回购 scope 文案（服务端下发的中文）按已知原串映射翻
+  译，未知串原样显示；服务端错误信息（`e.message`）仍为中文原文。
+- 未验：真机移动端；已打开的详情弹窗在切换后不重渲染（下次打开才换语言）。

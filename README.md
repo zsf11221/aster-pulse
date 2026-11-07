@@ -23,6 +23,17 @@ node server.js
 
 详细部署步骤、路由表、缓存时间、本地实测记录见 [DEPLOY.md](DEPLOY.md) 和 [VERIFICATION.md](VERIFICATION.md)。
 
+## 中英文切换
+
+右上角有个 中文 / EN 切换按钮，默认中文。切换存在浏览器 localStorage
+（`aster-pulse-lang`），刷新后保持选择。切换只改前端文案：静态 HTML 文案
+（`data-i18n` / `data-i18n-html` / `data-i18n-ph` / `data-i18n-aria` /
+`data-i18n-alt` 属性）+ CLIENT 动态文案 + 分享图片画布文字；日期按语言换
+locale（zh-CN / en-US，时区仍为 Asia/Shanghai）。数字、价格、链接、邀请链接
+不变，`server.js` 与接口行为不动。翻译表在 CLIENT 开头的 `I18N` 对象里
+（zh/en 各 203 条），`reference/client.js` 与内嵌 CLIENT 逐字节一致。
+切换后已打开的详情弹窗下次打开时才换语言（弹窗内容不重渲染）。
+
 ## 自动化测试与 CI
 
 测试在 `tests/server.test.js`，用 Node 自带 test runner（`node:test`），零依赖，
