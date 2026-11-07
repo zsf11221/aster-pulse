@@ -130,6 +130,7 @@
   `$ASTER` 的推文（如 “$ASTER ran 3.7x”）在主题内。任务定的关键词就是
   `$ASTER / ASTER`，本站按此实现、不做内容筛选、不编推文；想收紧可在
   `app/worker.js` 的 `community()` 查询里改（例如只留 `$ASTER`），改完重测。
+- 2026-11-07 23:35 用户决定收紧查询：`($ASTER OR ASTER) -is:retweet` 改为只搜 `$ASTER -is:retweet`（`app/worker.js` 的 `community()` 查询与返回的 `query` 字段、README、DEPLOY 同步改，空态文案改为“最近 7 天内未找到 $ASTER 相关推文。”）。
 
 ### 未验证
 

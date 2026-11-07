@@ -30,7 +30,7 @@
 | `GET /api/detail?symbol=` | 单币开盘价/最高价/涨幅（日 K） | 300s | `detail-v2-<symbol>.json` |
 | `POST /api/refresh` | 原站公开刷新；本包默认禁用，见下 | — | — |
 | `GET /api/health` | 本包新增（Cloudflare 版同名接口的平替） | — | — |
-| `GET /api/community` | 社区热度：X API v2 搜索最近推文（`($ASTER OR ASTER) -is:retweet`，最近 10 条，7 天窗口） | 1800s | `community.json` |
+| `GET /api/community` | 社区热度：X API v2 搜索最近推文（`$ASTER -is:retweet`，最近 10 条，7 天窗口） | 1800s | `community.json` |
 
 上游：`fapi.asterdex.com`（行情/K 线）、`www.asterdex.com`（公告）、
 `tapi.asterdex.com`（回购钱包 `0xa0edBaBcb48034e368de286b49F9603C7AfA1b60` 的成交）。

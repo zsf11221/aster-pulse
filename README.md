@@ -74,11 +74,11 @@ CI 配置在 `feat/tests-ci` 分支的 `.github/workflows/test.yml`（push 和 P
 
 - **接口**：`GET /api/community`，返回 `{available, tweets[], query, windowDays: 7, stale, updatedAt}`；
   每条推文含作者（`name` / `@username`）、时间、正文、点赞/转推数和跳转 `x.com` 的链接。
-- **上游调用**：`GET https://api.x.com/2/tweets/search/recent?query=($ASTER OR ASTER) -is:retweet&max_results=10&tweet.fields=created_at,author_id,public_metrics&expansions=author_id&user.fields=username,name`，
+- **上游调用**：`GET https://api.x.com/2/tweets/search/recent?query=$ASTER -is:retweet&max_results=10&tweet.fields=created_at,author_id,public_metrics&expansions=author_id&user.fields=username,name`，
   请求头 `Authorization: Bearer <X_BEARER_TOKEN>`。默认只返回 `id`/`text`，
   作者名、时间、互动数都是靠 `tweet.fields` / `expansions` / `user.fields` 另外要来的。
   该端点只返回最近 7 天内的推文；`max_results` 只能取 10–100，本站取最小值 10。
-- **查询**：`($ASTER OR ASTER) -is:retweet`（$ASTER 话题标签或 ASTER 关键词，排除转推，
+- **查询**：`$ASTER -is:retweet`（只搜 $ASTER 话题标签，排除转推，
   不限语言，中英文都可展示；不做内容筛选，不编推文）。
 - **缓存与限额**：服务端缓存 TTL 1800s（30 分钟），缓存文件 `data/cache/community.json`；
   前端每 1800s 刷新一次，后台每 1800s 刷一次。缓存未过期时不调上游，
@@ -95,7 +95,7 @@ CI 配置在 `feat/tests-ci` 分支的 `.github/workflows/test.yml`（push 和 P
     不够时把 `app/worker.js` 里 `community.json` 的 TTL（1800000 毫秒）调大即可。
   - 2026-11-07 已用真实密钥联调通过（见 VERIFICATION.md）：连接器 `custom.x` 的
     helper 搜 `ASTER` 返回 10 条（`meta.result_count` 10）；本站 `/api/community`
-    用生产同款查询 `($ASTER OR ASTER) -is:retweet` 返回 9 条，作者、时间、
+    用生产同款查询 `($ASTER OR ASTER) -is:retweet` 返回 9 条（2026-11-07 23:35 用户决定收紧为只搜 `$ASTER`），作者、时间、
     正文、x.com 链接齐全，命中缓存后 2ms。TTL 取 1800s 而不是 15 分钟，
     是更保守的选择（费用上限减半）；想更频繁可把 TTL 改小，但不要低于 300s。
 - **配置**：密钥只从环境变量 `X_BEARER_TOKEN` 读（`server.js` 传给 `worker.fetch` 的
