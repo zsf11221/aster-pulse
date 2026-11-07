@@ -5,3 +5,5 @@
 
 **改网站请改仓库根目录下的 `app/worker.js`，不要改这里。**
 改这里不会生效，服务器跑的是 `app/worker.js` + `server.js`。
+例外：`client.js` 是 `app/worker.js` 里内嵌 `CLIENT` 的等值镜像，两处须保持
+完全一致（改完用 Node 求值核对），改前端 JS 时两者一起改。
