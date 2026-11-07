@@ -28,6 +28,7 @@ check "GET /api/health"             "$BASE/api/health" 10000
 check "GET /api/markets"            "$BASE/api/markets" 60000
 check "GET /api/announcements"      "$BASE/api/announcements" 60000
 check "GET /api/activities"         "$BASE/api/activities" 60000
+check "GET /api/community"             "$BASE/api/community" 10000
 check "GET /api/market-detail"      "$BASE/api/market-detail?symbol=BTCUSDT" 60000
 check "GET /api/detail"             "$BASE/api/detail?symbol=XTENUSDT" 120000
 echo "--- /api/detail BTCUSDT 预期 502（原站逻辑：老币种首日 K 线缺失，线上站同样 502，非部署问题）---"

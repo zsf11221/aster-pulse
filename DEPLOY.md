@@ -8,7 +8,7 @@
 `app/worker.js` 是原站入口 `original-site/worker/index.js` 的复制，
 原始 SHA256 `c5f4a56ba88b57fa6945bb41eceefd6a08869abc16a99da00821d40e81d0b9d9`。
 2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 全网质押 + 累计销毁）与回购卡片前端指标、
-右上角“打开 Aster”按钮改为邀请链接；当前 SHA256 `71263f993638b9b0f4801488111ec1fa40ac97c593b36991394c33e90b76fa23`。
+右上角“打开 Aster”按钮改为邀请链接；当前 SHA256 `2b7ad19d94388f839d96098af9166bd0869d5bfcc72df25796f6bbf07ad60681`（2026-11-07 新增 /api/community 后）。
 
 ## 原站结构（已读完源码确认）
 
@@ -30,6 +30,7 @@
 | `GET /api/detail?symbol=` | 单币开盘价/最高价/涨幅（日 K） | 300s | `detail-v2-<symbol>.json` |
 | `POST /api/refresh` | 原站公开刷新；本包默认禁用，见下 | — | — |
 | `GET /api/health` | 本包新增（Cloudflare 版同名接口的平替） | — | — |
+| `GET /api/community` | 社区热度：X API v2 搜索最近推文（`($ASTER OR ASTER) -is:retweet`，最近 10 条，7 天窗口） | 1800s | `community.json` |
 
 上游：`fapi.asterdex.com`（行情/K 线）、`www.asterdex.com`（公告）、
 `tapi.asterdex.com`（回购钱包 `0xa0edBaBcb48034e368de286b49F9603C7AfA1b60` 的成交）。
@@ -53,6 +54,13 @@
    `curl -X POST -H "x-refresh-token: <token>" http://127.0.0.1:3000/api/refresh`。
 4. **守护二选一**：Docker（`Dockerfile` + `docker-compose.yml`，推荐）或
    systemd（`aster-pulse.service`，不用 Docker 时用）。
+5. **社区热度（2026-11-07 新增，`GET /api/community`）**：服务端调 X API v2
+   搜索最近推文（见 README.md 的“社区热度”一节），密钥只从环境变量
+   `X_BEARER_TOKEN` 读（`server.js` 传给 `worker.fetch` 的 `env`，`docker-compose.yml`
+   已接好该变量）。服务器部署时在 `/opt/aster-pulse/.env` 里加一行
+   `X_BEARER_TOKEN=...`（`.env` 不进 git），然后重启容器/服务生效。
+   TTL 1800s、缓存文件 `community.json`；没配密钥时接口返回 `available:false`，
+   前端显示“暂未接入 X 搜索 API”，其余功能不受影响。
 
 ## 文件清单
 

@@ -11,6 +11,8 @@ services:
       # 手动刷新才用得到，不配则公开 POST /api/refresh 一律 405。
       # 配了之后：curl -X POST -H "x-refresh-token: <值>" http://127.0.0.1:3000/api/refresh
       - REFRESH_TOKEN=${REFRESH_TOKEN:-}
+      # 社区热度才用得到；不配则 /api/community 返回 available:false，前端显示“暂未接入”。
+      - X_BEARER_TOKEN=${X_BEARER_TOKEN:-}
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

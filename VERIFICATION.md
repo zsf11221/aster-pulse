@@ -77,3 +77,67 @@
 - 前端：回购卡片 token-stats 区由 2 指标改为 3 指标（价格 / 全网质押 / 累计销毁，显示 2.13 亿 ASTER）；回购脚注（#buy-note）与分享图片里的“累计销毁：尚未接入”占位已替换为真实数；失败回退与旧缓存逻辑与价格/质押一致。首页仅剩的一处“尚未接入”是社区热度区“尚未接入 X 搜索 API”，与销毁无关，未动。
 - 口径：只显示“全部项目累计销毁”一个主数。升级后（6/17 起）累计 34,912,404.82 与最新周期 10/19–11/02 回购+销毁各 2,604,529.88 只写在注释/文档里，不在页面并列，避免混淆。
 - `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3101）全部通过；/api/detail?symbol=BTCUSDT 502 为原站已知行为。
+
+## 2026-11-07 补充：/api/community 社区热度（X API v2，真密钥联调）
+
+测试方式：Node v24.22.1，`PORT=3105/3106 HOST=127.0.0.1`，独立 CACHE_DIR。
+真实搜索调用共 2 次（helper 1 次 + 本站接口上游 1 次，按次计费约 $0.005/条，
+19 条 ≈ $0.10；其余全部命中缓存或走无密钥路径，未产生 X 费用）。
+密钥未以任何形式打印、记录或写入仓库：本站联调用的凭证是连接器 `custom.x`
+的 `hsurr:` 替身，由本机 Sentinel 在出口到已注册主机 `api.x.com` 时替换，
+只通过子进程环境变量传给 `node server.js`，测完即删启动脚本，进程已停。
+
+### 功课：端点与限额（查于 2026-11-07）
+
+- 端点 `GET https://api.x.com/2/tweets/search/recent`，`Authorization: Bearer <token>`；
+  `query`（必填）、`max_results` 只能 10–100、默认只返回 `id`/`text`，
+  作者名/时间/互动数靠 `tweet.fields=created_at,author_id,public_metrics` +
+  `expansions=author_id` + `user.fields=username,name` 另外要来；只返回最近 7 天。
+  以上除限额数字外，均经本次真机调用证实。
+- 限额数字未能在官方文档页直读核对：`docs.x.com` / `developer.x.com`
+  在本沙箱打不开（域名被拦截），以下来自 2026 年多家公开资料交叉核对，
+  各来源说法不一，以开发者后台实际显示为准：
+  - 2026 年 2 月 6 日起新开发者默认按次计费（Pay Per Use）：读约 $0.005/条，
+    月上限 200 万条（另有 2026 年 10 月的公开资料称已提到 300 万条）；
+    旧包月档 Basic $200/月、Pro $5,000/月已不对新用户开放，仅老用户保留。
+  - 各来源对旧 Basic 档 recent search 的 15 分钟限额说法不一（15–450 次），
+    月度上限约 10,000–15,000（按请求计还是按返回条数计，说法也不一致）。
+- TTL 定为 1800s（30 分钟，比任务示例的 15 分钟更保守）：上游请求上限为
+  每小时 2 次、每天 48 次、每月约 1,440 次，每次最多返回 10 条，
+  即每月最多约 14,400 条，理论费用上限约 $72/月（14,400 × $0.005，
+  实际按返回条数计）；即使按最严的旧 Basic 月度 10,000 条口径，
+  也只在每次都满 10 条的忙月才可能接近，需看开发者后台用量。
+  想调频率只改 `app/worker.js` 里 `community.json` 的 TTL（1800000 毫秒）
+  与 `server.js`、`reference/client.js` 里的 1800s 刷新间隔，不要低于 300s。
+
+### 接口实测
+
+| 检查 | 状态 | 耗时 | 备注 |
+|---|---|---|---|
+| helper 搜 `ASTER` 10 条（`x_search.py ASTER 10`） | 200 | 684ms | `returned` 10，`meta.result_count` 10，`next_token` 有；最新一条 2026-11-07T15:16:49Z，id 2119086676538753213 |
+| `GET /api/community`（无密钥） | 200 | <20ms | `available:false`，`tweets:[]`，不调上游、不写缓存 |
+| `GET /api/community`（真密钥，首次，上游） | 200 | <1s | `available:true`，`stale:false`，返回 9 条（X 只给了 9 条，`max_results=10` 是上限不是保证）；首条 @dokkjya 2026-11-07T15:15:19Z，末条 @Panoramafm_do 15:09:19Z；9 条全部有 `https://x.com/<用户>/status/<id>` 链接；`query` 为 `($ASTER OR ASTER) -is:retweet`，`windowDays` 7 |
+| `GET /api/community`（第二次，缓存命中） | 200 | 2ms | `updatedAt` 与首次完全相同（1794064657287），未产生新的上游调用；`community.json` 落盘 3,552 字节 |
+| stale 回退（缓存 `updatedAt` 手动改旧 3600s + 上游地址改死 `http://127.0.0.1:9`） | 200 | 8ms | `stale:true`，同样 9 条旧推文（首条 id 与 live 一致），`error: fetch failed`；后台刷新日志 `community 200 stale=true 3ms` |
+| `GET /`（无密钥服务） | 200 | 26ms | 21,654 字节，含 `#community-list` 与 `#community-status` 新容器；首页 0 处 `fonts.googleapis.com` |
+| `GET /client.js`（无密钥服务） | 200 | 18ms | 22,035 字节，含 `loadCommunity`/`renderCommunity`；内嵌 CLIENT 与 `reference/client.js` 用 Node 求值 + diff 核对，逐字节一致 |
+| `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3105，无密钥） | 全部通过 | 约 16s | `GET /api/community` 200、18ms、169 字节（`available:false`）；其余接口同前：markets 21ms、buyback 首次 10,238ms、缓存后 17ms；`/api/detail?symbol=BTCUSDT` 502 为原站已知行为；404 预期 |
+
+### 已知口径问题（不是 bug，是查询本身的口径）
+
+- 裸关键词 `ASTER` 也会命中紫苑花、导演 Ari Aster 等无关推文，本次 9 条里
+  就有 2 条园艺问答（“a late-planted aster”）和 1 条 “What is Ari Aster cooking???”；
+  `$ASTER` 的推文（如 “$ASTER ran 3.7x”）在主题内。任务定的关键词就是
+  `$ASTER / ASTER`，本站按此实现、不做内容筛选、不编推文；想收紧可在
+  `app/worker.js` 的 `community()` 查询里改（例如只留 `$ASTER`），改完重测。
+
+### 未验证
+
+1. **浏览器内渲染**：子代理无 live browser，只验了服务端 HTML/JS 下发内容
+   （新容器、`loadCommunity` 存在）与 `node --check`；推文列表在真实浏览器里
+   的渲染、点击跳转、30 分钟刷新节奏需上线后肉眼确认。
+2. **生产服务器**：未动服务器、DNS、`deploy.sh`；服务器 `.env` 配
+   `X_BEARER_TOKEN` + 重启 + 线上 `/api/community` 实测待部署时做。
+3. **X 开发者后台用量/账单**：未打开后台核对本次 2 次调用的计费与剩余额度；
+   上面费用数字是按公开单价算的理论值，以后台为准。
+4. **真机移动端**：未验。
