@@ -1,0 +1,23 @@
+name: Test
+
+# push 和 PR 都跑：先语法检查，再跑接口测试（Node 自带 test runner，零依赖）。
+# 测试调真实上游接口（Aster / DefiLlama / CoinGecko），buyback 冷启动
+# 可能要几十秒，所以 job 超时放宽到 15 分钟。
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm run check
+      - run: npm test
