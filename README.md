@@ -23,6 +23,33 @@ node server.js
 
 详细部署步骤、路由表、缓存时间、本地实测记录见 [DEPLOY.md](DEPLOY.md) 和 [VERIFICATION.md](VERIFICATION.md)。
 
+## 自动化测试与 CI
+
+测试在 `tests/server.test.js`，用 Node 自带 test runner（`node:test`），零依赖，
+不改任何应用逻辑。测试把 `server.js` 当子进程启动（临时端口 + 临时
+`CACHE_DIR`，不污染仓库里的 `data/cache`），调真实上游接口断言：
+
+- `/api/health`：服务名、uptime、缓存目录等字段
+- `/`：首页 200 且不含 Google Fonts
+- `/api/markets`：`rows` 数组结构、每行 symbol/price/change24 类型
+- `/api/token-stats`：price / staked / burned 三个字段存在与类型、stale 标记逻辑
+- `/api/buyback`：7 天统计结构（day/qty/spent/count）
+- `/api/detail?symbol=BTCUSDT`：返回 502 是原站已知行为（老币种首日 K 线缺失），
+  测试只断言它符合已知行为，不当成失败
+- `POST /api/refresh`：无 token 时返回 405
+
+断言只认结构不认数字：不断言具体价格、质押量或销毁量，只断言状态码 200、
+JSON 结构、关键字段存在与类型、stale 逻辑；上游波动不会导致误报。
+buyback 冷启动要调 7 天分段成交，单测超时放宽到 180 秒。
+
+```bash
+npm run check   # 语法检查
+npm test        # 跑全部接口测试
+```
+
+CI 在 `.github/workflows/test.yml`：push 和 PR 时，先跑 `npm run check` 再跑
+`npm test`，Node 20 和 22 各跑一档。
+
 ## 在 Codex 里改完，怎么同步（标准流程）
 
 1. 在 Codex 里打开这个仓库（`zsf11221/aster-pulse`），改 `app/worker.js`（或 `server.js`，只在需要改适配层时）。
