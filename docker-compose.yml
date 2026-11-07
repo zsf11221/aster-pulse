@@ -1,0 +1,23 @@
+services:
+  aster-pulse:
+    build: .
+    image: aster-pulse-hk:latest
+    container_name: aster-pulse
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - CACHE_DIR=/app/data/cache
+      # 手动刷新才用得到，不配则公开 POST /api/refresh 一律 405。
+      # 配了之后：curl -X POST -H "x-refresh-token: <值>" http://127.0.0.1:3000/api/refresh
+      - REFRESH_TOKEN=${REFRESH_TOKEN:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

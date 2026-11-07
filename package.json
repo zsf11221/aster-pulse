@@ -1,0 +1,1 @@
+{"description":"Aster Pulse 香港服务器部署包：Node 适配层 + 磁盘缓存","engines":{"node":">=20"},"name":"aster-pulse-hk","private":true,"scripts":{"check":"node --check server.js && node --check app/worker.js && echo OK","start":"node server.js"},"type":"module","version":"1.0.0"}

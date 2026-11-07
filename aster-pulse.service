@@ -1,0 +1,25 @@
+# Aster Pulse — systemd 服务（不用 Docker 时用这个；二选一，见 README）
+# 放到 /etc/systemd/system/aster-pulse.service
+# 注意：把 /opt/aster-pulse 换成你实际解压的目录；User 换成实际用户。
+[Unit]
+Description=Aster Pulse (Node disk-cache adapter)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/aster-pulse
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=CACHE_DIR=/opt/aster-pulse/data/cache
+Environment=NODE_ENV=production
+# Environment=REFRESH_TOKEN=在这里填一个随机串（可选）
+ExecStart=/usr/bin/node /opt/aster-pulse/server.js
+Restart=on-failure
+RestartSec=5
+# buyback 首次计算慢，启动后给足时间，不要因为启动慢就被 systemd 判死
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
