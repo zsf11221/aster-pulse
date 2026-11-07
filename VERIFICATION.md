@@ -123,6 +123,11 @@
 | `GET /client.js`（无密钥服务） | 200 | 18ms | 22,035 字节，含 `loadCommunity`/`renderCommunity`；内嵌 CLIENT 与 `reference/client.js` 用 Node 求值 + diff 核对，逐字节一致 |
 | `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3105，无密钥） | 全部通过 | 约 16s | `GET /api/community` 200、18ms、169 字节（`available:false`）；其余接口同前：markets 21ms、buyback 首次 10,238ms、缓存后 17ms；`/api/detail?symbol=BTCUSDT` 502 为原站已知行为；404 预期 |
 
+### 2026-11-08 社区热度渲染 bug 与官方兜底
+
+- 中英文切换（88b314f）引入一个渲染 bug：`renderCommunity` 里 `d.tweets.map(t=>...)` 的回调参数 `t` 遮住了翻译函数 `t()`，模板里 `t('community.viewOnX')` 一调就抛错，状态栏已更新、列表永远停在“正在读取 X 最新讨论…”——接口本身是通的（`/api/community` available:true），只是前端没画出来。已修：回调参数改名 `tw`，其余 `t('...')` 不动；无头 Chrome 实测 mock 上游 10 条推文全部画出，状态时间新鲜。
+- 官方兜底（用户 2026-11-08 00:52 要求）：搜索少于 3 条时补 @Aster_DEX 最新 3 条（`from:Aster_DEX -is:retweet`，去重、带 `official:true`）；mock 联调：主搜 1 条 → 共 4 条、3 条官方；主搜 10 条 → 共 10 条、不调第二下。
+
 ### 已知口径问题（不是 bug，是查询本身的口径）
 
 - 裸关键词 `ASTER` 也会命中紫苑花、导演 Ari Aster 等无关推文，本次 9 条里
