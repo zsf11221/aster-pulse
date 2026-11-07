@@ -20,6 +20,8 @@
 //   GET  /api/activities              TTL 60s  cache activities.json
 //   GET  /api/buyback                 TTL 300s cache buyback.json（7 天分段查成交，最慢）
 //   GET  /api/token-stats             价格 TTL 30s（token-price.json）+ 质押 TTL 300s（token-staked.json）+ 销毁 TTL 300s（token-burned.json）
+//   GET  /api/community              X API v2 搜索最近推文，TTL 1800s cache community.json；
+//                                     没配 X_BEARER_TOKEN 时返回 available:false，不调上游
 //   GET  /api/market-detail?symbol=   TTL 30s  cache market-detail-<symbol>.json
 //   GET  /api/detail?symbol=          TTL 300s cache detail-v2-<symbol>.json
 //   POST /api/refresh                 原站有；本机默认禁用公开调用（见下），由后台刷新代替
@@ -68,7 +70,10 @@ const BUCKET = {
     await fs.promises.rename(tmp, file);
   },
 };
-const env = { BUCKET };
+// X_BEARER_TOKEN 只从环境变量读（见 .env.example），绝不写进代码或仓库；
+// 没配时 community() 直接返回 available:false。X_API_BASE 仅供本地 mock 联调
+// 覆盖上游地址，生产不配（默认 https://api.x.com）。
+const env = { BUCKET, X_BEARER_TOKEN: process.env.X_BEARER_TOKEN || '', X_API_BASE: process.env.X_API_BASE || '' };
 
 // ---------------------------------------------------------------------------
 // 后台刷新状态（供 /api/health 查看）
@@ -111,12 +116,21 @@ async function refreshBuyback() {
   try { await refreshOne('buyback', '/api/buyback'); }
   finally { refreshRunning = false; }
 }
+// 社区热度：TTL 1800s，后台每 1800s 刷一次（与 TTL 对齐；缓存未过期时不调上游，
+// 不会多花 X API 配额）。没配 X_BEARER_TOKEN 时接口直接返回 available:false。
+async function refreshCommunity() {
+  if (refreshRunning) return;
+  refreshRunning = true;
+  try { await refreshOne('community', '/api/community'); }
+  finally { refreshRunning = false; }
+}
 function startBackgroundRefresh() {
   // 启动后先在后台预热（不等它完成就开始监听端口，首屏不被 buyback 拖死）；
   // 预热期间用户请求若缓存未命中，会按原站逻辑现算一次，这是预期行为。
-  setTimeout(() => { refreshLoop().then(() => refreshBuyback()); }, 1000);
+  setTimeout(() => { refreshLoop().then(() => refreshBuyback()).then(() => refreshCommunity()); }, 1000);
   setInterval(refreshLoop, 60_000);
   setInterval(refreshBuyback, 300_000);
+  setInterval(refreshCommunity, 1_800_000);
 }
 
 // ---------------------------------------------------------------------------

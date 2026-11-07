@@ -65,3 +65,7 @@ $('#alert-toast').onclick=()=>{$('#alert-toast').hidden=true;const p=$('#alerts'
 $('#alert-listing-toggle').checked=alertState.listing;renderAlertStatus();renderPriceAlerts();renderAlertLog();
 
 loadActivities();setInterval(loadActivities,60000);
+let communityCache=null;
+function renderCommunity(d){const n=$('#community-notice');if(!d.available){$('#community-status').textContent='暂未接入 X 搜索 API';$('#community-list').innerHTML='<p class="sub">尚未接入 X 搜索 API，暂不展示热度排行。</p>';if(n)n.textContent='社区 X 自动采集尚未接通';return}if(n)n.textContent='社区 X 每 30 分钟自动更新';$('#community-status').textContent=(d.stale?'缓存 · 更新延迟':'X 搜索 · 最近 7 天')+' · '+when(d.updatedAt);$('#community-list').innerHTML=d.tweets.length?d.tweets.map(t=>`<a class="tweet-item" href="${esc(t.url)}" target="_blank" rel="noopener"><div class="tweet-meta"><b>${esc(t.author.name||t.author.username||'X 用户')}</b><span>@${esc(t.author.username||'')}</span><time>${t.createdAt?when(t.createdAt):''}</time></div><p>${esc(t.text)}</p><div class="tweet-metrics">${t.likes==null?'':'♥ '+num(t.likes)+' · '}${t.retweets==null?'':'↻ '+num(t.retweets)+' · '}在 X 查看 ↗</div></a>`).join(''):'<p class="sub">最近 7 天内未找到 $ASTER / ASTER 相关推文。</p>'}
+async function loadCommunity(){try{const d=await api('community');communityCache=d;renderCommunity(d)}catch(e){if(communityCache){renderCommunity({...communityCache,stale:true})}else{$('#community-status').textContent='暂未接入 X 搜索 API';$('#community-list').innerHTML='<p class="sub">尚未接入 X 搜索 API，暂不展示热度排行。</p>'}}}
+loadCommunity();setInterval(loadCommunity,1800000);
