@@ -128,6 +128,11 @@
 - 中英文切换（88b314f）引入一个渲染 bug：`renderCommunity` 里 `d.tweets.map(t=>...)` 的回调参数 `t` 遮住了翻译函数 `t()`，模板里 `t('community.viewOnX')` 一调就抛错，状态栏已更新、列表永远停在“正在读取 X 最新讨论…”——接口本身是通的（`/api/community` available:true），只是前端没画出来。已修：回调参数改名 `tw`，其余 `t('...')` 不动；无头 Chrome 实测 mock 上游 10 条推文全部画出，状态时间新鲜。
 - 官方兜底（用户 2026-11-08 00:52 要求）：搜索少于 3 条时补 @Aster_DEX 最新 3 条（`from:Aster_DEX -is:retweet`，去重、带 `official:true`）；mock 联调：主搜 1 条 → 共 4 条、3 条官方；主搜 10 条 → 共 10 条、不调第二下。
 
+### 2026-11-08 /client.js 缓存 1 小时，旧版 JS 赖在用户浏览器里
+
+- 现象：渲染 bug 已修并上线（a123963），用户 01:11 截图里社区区还是旧样子、状态“缓存 · 更新延迟”。查实：线上 `/client.js` 的响应头是 `Cache-Control: public, max-age=3600`（nginx.conf 里 `location = /client.js` 写的），而首页 HTML 是 `no-store`。所以用户浏览器每次拿新 HTML、却用缓存的旧 JS，bug 修了也看不到，直到 1 小时缓存过期。
+- 已改：nginx.conf 里 /client.js 改成 `Cache-Control: no-cache`（每次向服务器确认），logo 仍可缓存。注意：这次改动只对改完之后的访问生效——已经缓存了旧版的浏览器，要等旧缓存过期（或清缓存/无痕打开）才会拿到新版。
+
 ### 已知口径问题（不是 bug，是查询本身的口径）
 
 - 裸关键词 `ASTER` 也会命中紫苑花、导演 Ari Aster 等无关推文，本次 9 条里
