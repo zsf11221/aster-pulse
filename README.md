@@ -58,7 +58,7 @@ npm run check   # 语法检查
 npm test        # 跑全部接口测试
 ```
 
-CI 配置在 `feat/tests-ci` 分支的 `.github/workflows/test.yml`（push 和 PR 时先跑 `npm run check` 再跑 `npm test`，Node 20 和 22 各一档），因当前 GitHub 授权没有 `workflow` 权限、推不上去，暂未进 main，待有 workflow 权限的账号推送后生效；测试本身本地已可跑。
+CI 配置在 main 的 `.github/workflows/test.yml`（push 和 PR 时先跑 `npm run check` 再跑 `npm test`，Node 20 和 22 各一档），2026-11-07 重新授权拿到 `workflow` 权限后已推上 main。
 
 ## 在 Codex 里改完，怎么同步（标准流程）
 
