@@ -7,8 +7,8 @@
 对应源码版本 966d219200e4aa0163be0137aaad276f23073ee7）。
 `app/worker.js` 是原站入口 `original-site/worker/index.js` 的复制，
 原始 SHA256 `c5f4a56ba88b57fa6945bb41eceefd6a08869abc16a99da00821d40e81d0b9d9`。
-2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 全网质押）与回购卡片前端指标、
-右上角“打开 Aster”按钮改为邀请链接；当前 SHA256 `e048e8bdb19b7297f241736eff865d094b3c6db73f615d349ed75adb634d6ad1`。
+2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 全网质押 + 累计销毁）与回购卡片前端指标、
+右上角“打开 Aster”按钮改为邀请链接；当前 SHA256 `71263f993638b9b0f4801488111ec1fa40ac97c593b36991394c33e90b76fa23`。
 
 ## 原站结构（已读完源码确认）
 
@@ -25,7 +25,7 @@
 | `GET /api/announcements` | 上新公告 NEW_LISTING | 60s | `announcements.json` |
 | `GET /api/activities` | 活动公告 ACTIVITY | 60s | `activities.json` |
 | `GET /api/buyback` | 近 7 日回购成交统计 | 300s | `buyback.json` |
-| `GET /api/token-stats` | ASTER 当前价（永续）+ 全网质押（DefiLlama TVL ÷ 现价换算） | 价格 30s / 质押 300s | `token-price.json` + `token-staked.json` |
+| `GET /api/token-stats` | ASTER 当前价（永续）+ 全网质押（DefiLlama TVL ÷ 现价换算）+ 累计销毁（CoinGecko 总量反推，80亿-总量） | 价格 30s / 质押 300s / 销毁 300s | `token-price.json` + `token-staked.json` + `token-burned.json` |
 | `GET /api/market-detail?symbol=` | 单币行情 + 未平仓量 | 30s | `market-detail-<symbol>.json` |
 | `GET /api/detail?symbol=` | 单币开盘价/最高价/涨幅（日 K） | 300s | `detail-v2-<symbol>.json` |
 | `POST /api/refresh` | 原站公开刷新；本包默认禁用，见下 | — | — |

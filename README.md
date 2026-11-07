@@ -7,7 +7,7 @@ Aster 社区观察站：上新、价格表现、社区热度与每日回购。
 
 这个仓库里只有一份会真正跑起来的代码：
 
-- **改页面文字、样式、前端交互、API 接口，都改 `app/worker.js`**。它是原站 `worker/index.js` 的复制（原始 SHA256 `c5f4a56b…09d9`，2026-11-07 导出源码包；2026-11-07 起已改动：新增 `GET /api/token-stats` 与回购卡片指标、右上角按钮改为邀请链接，当前 SHA256 `e048e8bd…6ad1`），HTML、CSS、前端 JS、后端接口全在这个文件里。
+- **改页面文字、样式、前端交互、API 接口，都改 `app/worker.js`**。它是原站 `worker/index.js` 的复制（原始 SHA256 `c5f4a56b…09d9`，2026-11-07 导出源码包；2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 质押 + 累计销毁）与回购卡片指标、右上角按钮改为邀请链接，当前 SHA256 `71263f99…fa23`），HTML、CSS、前端 JS、后端接口全在这个文件里。
 - **`server.js` 是香港服务器的适配层**：把原站的 `BUCKET` 缓存换成磁盘缓存、后台定时刷新、去掉 Google Fonts。平时改网站不用动它。
 - **`reference/` 只是方便阅读的拆分版**（`client.js`、`backend.js`）和原包说明，改它们不会生效，运行时不读这些文件。
 - **`cloudflare-worker/` 是原站的 Cloudflare Workers 适配版**，香港服务器部署不用它。

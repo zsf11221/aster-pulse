@@ -19,7 +19,7 @@
 //   GET  /api/announcements           TTL 60s  cache announcements.json
 //   GET  /api/activities              TTL 60s  cache activities.json
 //   GET  /api/buyback                 TTL 300s cache buyback.json（7 天分段查成交，最慢）
-//   GET  /api/token-stats             价格 TTL 30s（token-price.json）+ 质押 TTL 300s（token-staked.json）
+//   GET  /api/token-stats             价格 TTL 30s（token-price.json）+ 质押 TTL 300s（token-staked.json）+ 销毁 TTL 300s（token-burned.json）
 //   GET  /api/market-detail?symbol=   TTL 30s  cache market-detail-<symbol>.json
 //   GET  /api/detail?symbol=          TTL 300s cache detail-v2-<symbol>.json
 //   POST /api/refresh                 原站有；本机默认禁用公开调用（见下），由后台刷新代替

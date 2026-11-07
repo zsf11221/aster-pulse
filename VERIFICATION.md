@@ -69,3 +69,11 @@
 - 右上角“打开 Aster”按钮 href 改为 https://www.aster.finance/zh-CN/referral/6e1d28（target=_blank、rel=noopener 保留）；本地首页实测：该链接恰好 1 处，旧交易链接 0 处，其余 9 处官方链接、公告链接、官方机制链接均未动；首页 0 处 fonts.googleapis.com。
 - `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3100）全部通过；/api/detail?symbol=BTCUSDT 502 为原站已知行为。
 - 未验证：新接口的断网 stale 回退未单独实测（与原有接口共用同一 cached()，此前已验证）；服务器上尚未同步、DNS 未切、国内访问未测。
+
+## 2026-11-07 补充：/api/token-stats 增加累计销毁
+
+- `GET /api/token-stats` 新增 `burned` 字段：取 CoinGecko `api/v3/coins/aster-2` 的 `market_data.total_supply`，累计销毁 = 80 亿 - 总量（TTL 300s，缓存键 `token-burned.json`，沿用 `cached()` stale 回退；失败显示旧缓存并标“缓存 · 更新延迟”，无缓存才显示“暂未接入”）。浏览器不直调 CoinGecko（免费接口有频率限制，服务端缓存 300s）。
+- 实测 2026-11-07 16:54 CST（本地，冷启动 1.23s、命中缓存 11ms）：`burned` 212,693,589.36 ASTER，`totalSupply` 7,787,306,410.64，与 16:49 直接查 CoinGecko 的数一致；价格 0.6805、质押 511,763,287 同接口返回正常。页面小字写明“CoinGecko 总量反推（80亿-总量）”，`burnedSource` 注明销毁地址 0x000000000000000000000000000000000000dEaD（BNB 链）。
+- 前端：回购卡片 token-stats 区由 2 指标改为 3 指标（价格 / 全网质押 / 累计销毁，显示 2.13 亿 ASTER）；回购脚注（#buy-note）与分享图片里的“累计销毁：尚未接入”占位已替换为真实数；失败回退与旧缓存逻辑与价格/质押一致。首页仅剩的一处“尚未接入”是社区热度区“尚未接入 X 搜索 API”，与销毁无关，未动。
+- 口径：只显示“全部项目累计销毁”一个主数。升级后（6/17 起）累计 34,912,404.82 与最新周期 10/19–11/02 回购+销毁各 2,604,529.88 只写在注释/文档里，不在页面并列，避免混淆。
+- `bash scripts/check-local.sh`（BASE=http://127.0.0.1:3101）全部通过；/api/detail?symbol=BTCUSDT 502 为原站已知行为。
