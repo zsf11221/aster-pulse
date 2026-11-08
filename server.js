@@ -73,7 +73,9 @@ const BUCKET = {
 // X_BEARER_TOKEN 只从环境变量读（见 .env.example），绝不写进代码或仓库；
 // 没配时 community() 直接返回 available:false。X_API_BASE 仅供本地 mock 联调
 // 覆盖上游地址，生产不配（默认 https://api.x.com）。
-const env = { BUCKET, X_BEARER_TOKEN: process.env.X_BEARER_TOKEN || '', X_API_BASE: process.env.X_API_BASE || '' };
+// DAILY_BRIEF_ENABLED 是日报的单一代志（默认 true）：设为 false 时
+// /api/daily-brief 返回 404，前端日报区块保持隐藏；彻底删除日报见 README。
+const env = { BUCKET, X_BEARER_TOKEN: process.env.X_BEARER_TOKEN || '', X_API_BASE: process.env.X_API_BASE || '', DAILY_BRIEF_ENABLED: process.env.DAILY_BRIEF_ENABLED !== 'false' };
 
 // ---------------------------------------------------------------------------
 // 后台刷新状态（供 /api/health 查看）
@@ -108,6 +110,7 @@ async function refreshLoop() {
     await refreshOne('announcements', '/api/announcements');
     await refreshOne('activities', '/api/activities');
     await refreshOne('token-stats', '/api/token-stats');
+    await refreshOne('daily-brief', '/api/daily-brief'); // TTL 300s，缓存未过期时不调上游
   } finally { refreshRunning = false; }
 }
 async function refreshBuyback() {

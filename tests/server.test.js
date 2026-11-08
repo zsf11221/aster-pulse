@@ -207,6 +207,31 @@ test('GET /api/buyback 返回 7 天回购统计', { timeout: SLOW_TIMEOUT }, asy
   assert.equal(typeof body.stale, 'boolean');
 });
 
+test('GET /api/daily-brief 返回日报结构', { timeout: SLOW_TIMEOUT }, async () => {
+  const { status, body, raw } = await getJSON('/api/daily-brief', { timeoutMs: 170_000 });
+  assert.equal(status, 200, `daily-brief 应返回 200，实际 ${status}，body：${raw}`);
+  assert.match(body.date, /^\d{4}-\d{2}-\d{2}$/, `date 应为 YYYY-MM-DD，实际 ${body.date}`);
+  assert.ok(body.top === null || typeof body.top.name === 'string', 'top 应为 null 或带 name 的对象');
+  if (body.top) {
+    assert.equal(typeof body.top.symbol, 'string');
+    assert.ok(body.top.change24 === null || typeof body.top.change24 === 'number');
+    assert.ok(body.top.fundingRate === null || typeof body.top.fundingRate === 'number',
+      `fundingRate 应为数字或 null，实际 ${body.top.fundingRate}`);
+  }
+  assert.ok(Array.isArray(body.top5), 'top5 应为数组');
+  assert.ok(body.top5.length <= 5, `top5 最多 5 条，实际 ${body.top5.length}`);
+  assert.equal(typeof body.score, 'number');
+  assert.ok(body.score >= 0 && body.score <= 100, `score 应在 0-100，实际 ${body.score}`);
+  assert.ok(['overheated', 'strong', 'watch', 'quiet'].includes(body.verdict),
+    `verdict 应为四种之一，实际 ${body.verdict}`);
+  assert.ok(Array.isArray(body.dino), 'dino 应为数组');
+  assert.ok(Array.isArray(body.events), 'events 应为数组');
+  assert.equal(typeof body.buyback, 'object');
+  assert.equal(typeof body.buyback.weekQty, 'number');
+  assert.equal(typeof body.stale, 'boolean');
+  assert.equal(typeof body.updatedAt, 'number');
+});
+
 test('GET /api/detail?symbol=BTCUSDT 返回已知 502（原站行为，非失败）', { timeout: FAST_TIMEOUT }, async () => {
   const { status, body, raw } = await getJSON('/api/detail?symbol=BTCUSDT');
   assert.equal(status, 502, `detail BTCUSDT 已知应返回 502，实际 ${status}，body：${raw}`);
@@ -222,4 +247,72 @@ test('POST /api/refresh 无 token 时返回 405', { timeout: FAST_TIMEOUT }, asy
   assert.equal(res.status, 405, `无 token 的 refresh 应返回 405，实际 ${res.status}`);
   const body = await res.json();
   assert.equal(typeof body.error, 'string');
+});
+
+// ---------------------------------------------------------------------------
+// /api/daily-brief 的 mock 上游单测：直接调 app/worker.js 的 fetch，
+// 上游 fetch 全部 stub，不碰真实网络。断言只认结构与异动分公式，
+// 不写死价格。DAILY_BRIEF_ENABLED=false 时接口应返回 404。
+// ---------------------------------------------------------------------------
+test('GET /api/daily-brief（mock 上游）返回聚合结构与异动分', async () => {
+  const worker = (await import('../app/worker.js')).default;
+  const store = new Map();
+  const env = {
+    BUCKET: {
+      async get(k) { const v = store.get(k); return v ? { json: async () => JSON.parse(v) } : null; },
+      async put(k, v) { store.set(k, String(v)); },
+    },
+    X_BEARER_TOKEN: '',
+    DAILY_BRIEF_ENABLED: true,
+  };
+  const now = Date.now();
+  const exchangeInfo = { symbols: [
+    { symbol: 'JCTUSDT', baseAsset: 'JCT', quoteAsset: 'USDT', status: 'TRADING', onboardDate: now - 86400000 },
+    { symbol: 'STONKBROKERUSDT', baseAsset: 'STONKBROKER', quoteAsset: 'USDT', status: 'TRADING', onboardDate: now - 2 * 86400000 },
+    { symbol: 'XLMUSDT', baseAsset: 'XLM', quoteAsset: 'USDT', status: 'TRADING', onboardDate: now - 3 * 86400000 },
+  ] };
+  const tickers = [
+    { symbol: 'JCTUSDT', lastPrice: '0.012', openPrice: '0.0027', quoteVolume: '23000000' },
+    { symbol: 'STONKBROKERUSDT', lastPrice: '0.0078', openPrice: '0.0056', quoteVolume: '500000' },
+    { symbol: 'XLMUSDT', lastPrice: '0.5', openPrice: '0.45', quoteVolume: '5000000' },
+  ];
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    const ok = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('exchangeInfo')) return ok(exchangeInfo);
+    if (u.includes('ticker/24hr')) {
+      if (u.includes('ASTERUSDT')) return ok({ lastPrice: '0.68', priceChangePercent: '1.0', closeTime: now });
+      return ok(tickers);
+    }
+    if (u.includes('premiumIndex')) return ok({ symbol: 'JCTUSDT', lastFundingRate: '0.0135', time: now });
+    if (u.includes('openInterest')) return ok({ symbol: 'JCTUSDT', openInterest: '753936743', time: now });
+    if (u.includes('tapi.asterdex.com')) return ok({ result: { fills: [], accountPrivacy: 'disabled' } });
+    if (u.includes('api.llama.fi')) return ok({ chainTvls: { staking: { tvl: [{ date: Math.floor(now / 1000), totalLiquidityUSD: 350000000 }] } } });
+    if (u.includes('api.coingecko.com')) return ok({ market_data: { total_supply: 7787306410 }, last_updated: new Date(now).toISOString() });
+    throw new Error('mock 未覆盖的上游: ' + u);
+  };
+  try {
+    const res = await worker.fetch(new Request('http://localhost/api/daily-brief'), env, {});
+    assert.equal(res.status, 200, `mock 日报应返回 200，实际 ${res.status}`);
+    const body = await res.json();
+    assert.equal(body.top.name, 'JCT', `涨幅第一应为 JCT，实际 ${body.top?.name}`);
+    assert.equal(body.top.fundingRate, 0.0135, `资金费率应为 0.0135，实际 ${body.top.fundingRate}`);
+    assert.equal(body.top.openInterest, '753936743');
+    assert.equal(body.verdict, 'overheated', `资金费率 1.35% 时结论应为 overheated，实际 ${body.verdict}`);
+    // JCT +344.4%：涨幅分 43.1 + 成交额分 13.4 + 资金费率分 13.4 + 领先分 15 ≈ 85
+    assert.ok(body.score >= 80 && body.score <= 90, `score 应在 80-90，实际 ${body.score}`);
+    assert.equal(body.top5.length, 3, `top5 应为 3 条，实际 ${body.top5.length}`);
+    assert.equal(body.top5[1].name, 'STONKBROKER');
+    assert.equal(body.dino.length, 1, `老币观察只应命中 XLM，实际 ${JSON.stringify(body.dino)}`);
+    assert.equal(body.dino[0].name, 'XLM');
+    assert.equal(typeof body.buyback.weekQty, 'number');
+    assert.equal(body.buyback.burned, 8000000000 - 7787306410);
+    assert.ok(Array.isArray(body.events), 'events 应为数组');
+    // 代志关闭时返回 404
+    const res404 = await worker.fetch(new Request('http://localhost/api/daily-brief'), { ...env, DAILY_BRIEF_ENABLED: false }, {});
+    assert.equal(res404.status, 404, `代志关闭时应返回 404，实际 ${res404.status}`);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });

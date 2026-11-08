@@ -7,7 +7,7 @@ Aster 社区观察站：上新、价格表现、社区热度与每日回购。
 
 这个仓库里只有一份会真正跑起来的代码：
 
-- **改页面文字、样式、前端交互、API 接口，都改 `app/worker.js`**。它是原站 `worker/index.js` 的复制（原始 SHA256 `c5f4a56b…09d9`，2026-11-07 导出源码包；2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 质押 + 累计销毁）与回购卡片指标、右上角按钮改为邀请链接；2026-11-07 新增 `GET /api/community`（X API v2 社区热度），当前 SHA256 `2b7ad19d…0681`），HTML、CSS、前端 JS、后端接口全在这个文件里。
+- **改页面文字、样式、前端交互、API 接口，都改 `app/worker.js`**。它是原站 `worker/index.js` 的复制（原始 SHA256 `c5f4a56b…09d9`，2026-11-07 导出源码包；2026-11-07 起已改动：新增 `GET /api/token-stats`（价格 + 质押 + 累计销毁）与回购卡片指标、右上角按钮改为邀请链接；2026-11-07 新增 `GET /api/community`（X API v2 社区热度）；2026-11-08 新增 `GET /api/daily-brief`（每日异动日报）与分享图自定义（模板/尺寸/内容开关/自定义一句话/水印），当前 SHA256 `e6c93844…043794`），HTML、CSS、前端 JS、后端接口全在这个文件里。
 - **`server.js` 是香港服务器的适配层**：把原站的 `BUCKET` 缓存换成磁盘缓存、后台定时刷新、去掉 Google Fonts。平时改网站不用动它。
 - **`reference/` 只是方便阅读的拆分版**（`client.js`、`backend.js`）和原包说明，改它们不会生效，运行时不读这些文件。
 - **`cloudflare-worker/` 是原站的 Cloudflare Workers 适配版**，香港服务器部署不用它。
@@ -18,7 +18,7 @@ Aster 社区观察站：上新、价格表现、社区热度与每日回购。
 node server.js
 # 打开 http://127.0.0.1:3000 ，接口：/api/markets /api/announcements
 # /api/activities /api/buyback /api/token-stats /api/market-detail?symbol=BTCUSDT
-# /api/detail?symbol=XTENUSDT /api/health /api/community
+# /api/detail?symbol=XTENUSDT /api/health /api/community /api/daily-brief
 ```
 
 详细部署步骤、路由表、缓存时间、本地实测记录见 [DEPLOY.md](DEPLOY.md) 和 [VERIFICATION.md](VERIFICATION.md)。
@@ -31,7 +31,7 @@ node server.js
 `data-i18n-alt` 属性）+ CLIENT 动态文案 + 分享图片画布文字；日期按语言换
 locale（zh-CN / en-US，时区仍为 Asia/Shanghai）。数字、价格、链接、邀请链接
 不变，`server.js` 与接口行为不动。翻译表在 CLIENT 开头的 `I18N` 对象里
-（zh/en 各 203 条），`reference/client.js` 与内嵌 CLIENT 逐字节一致。
+（zh/en 各 259 条），`reference/client.js` 与内嵌 CLIENT 逐字节一致。
 切换后已打开的详情弹窗下次打开时才换语言（弹窗内容不重渲染）。
 
 ## 自动化测试与 CI
@@ -126,6 +126,56 @@ CI 配置在 main 的 `.github/workflows/test.yml`（push 和 PR 时先跑 `npm 
   注意：裸关键词 `ASTER` 也会命中紫苑花、导演 Ari Aster 等无关推文，
   这是查询本身的口径，不是本站编造；想收紧可在 `app/worker.js` 的
   `community()` 查询里改（例如只留 `$ASTER`），改完重测。
+
+## 每日异动日报
+
+首页回购区之后、上新雷达之前，有一个“每日异动日报”区块：开头三句话摘要、
+今日最热大卡片（一句话结论 + 信号佐证 + 异动分）、老币观察、催化剂日历、
+回购销毁一行。样式沿用现有深色主题与卡片样式，不引入新配色、新字体。
+
+- **接口**：`GET /api/daily-brief`，TTL 300s，缓存文件 `data/cache/daily-brief.json`，
+  失败时沿用旧缓存并标 `stale:true`。聚合现有接口（markets / buyback /
+  token-stats，复用它们各自的缓存）+ 涨幅第一名追加查资金费率与持仓量
+  （Aster 公开接口 `fapi/v1/premiumIndex` / `fapi/v1/openInterest`；
+  失败只留空，不让整份日报失败）。后台每 60 秒刷一次（缓存未过期时不调上游）。
+- **异动分（0–100）**：只用现有数据算，不编造 1h 数据（站上没有 1h 数据）：
+  涨幅分（50）= min(50, 24h 涨幅 × 0.125)；成交额分（20）= min(20, 4 × log10(24h 成交额 ÷ 10000))；
+  资金费率分（15）= min(15, |资金费率 − 0.01%| × 1000)；领先分（15）= min(15, (第一名涨幅 − 第二名涨幅) × 0.05)。
+  公式写在 `app/worker.js` 的 `briefScore()` 注释里。
+- **一句话结论**：服务端只给结论键，前端按语言渲染句子——资金费率 > 0.5% 为“过热，别追”；
+  否则 24h 涨幅 ≥ 100% 为“放量大涨”、≥ 20% 为“涨幅居前”、其余为“今日无明显异动”。
+- **老币观察**：XLM / XTZ / LTC / ZEC，从 markets 实时行里取，取不到就隐藏该行；
+  “值得关注”筛选只留 24h 涨幅 ≥ 20% 的。
+- **催化剂日历**：`app/worker.js` 里 `BRIEF_EVENTS` 静态数组（人工维护），
+  日期过了当天（北京时间）自动隐藏；有新事件加一行，删掉数组即去掉整个日历。
+  最新销毁周期（`BRIEF_BURN_CYCLE`）同样人工维护，下一期公布后更新。
+- **开关与删除**：单一代志 `DAILY_BRIEF_ENABLED`，默认 true。
+  关闭：服务器 `.env` 加 `DAILY_BRIEF_ENABLED=false` 后重启，接口返回 404，
+  前端区块保持隐藏，其它功能不受影响。彻底删除：删掉 `app/worker.js` 里
+  `BEGIN/END DAILY BRIEF` 标出的三处（HTML 区块、`<style>` 段、CLIENT 段、
+  后端 `dailyBrief()` 及路由）+ `server.js` 里的代志与后台刷新行 +
+  `tests/server.test.js` 里的日报测试 + `scripts/check-local.sh` 里的日报检查行 +
+  本节；删完跑 `npm run check` 与 `npm test` 确认。
+
+## 分享图自定义
+
+回购区“分享图片 ↗”与日报“分享日报图片 ↗”打开的是同一个分享弹窗，
+画布选项两处共用（日报默认用同一套选项）。弹窗里可以改：
+
+- **模板**：浅色（现有默认图，米白底 + 深蓝字）/ 深色（站内深色主题）/ 品牌金。
+- **尺寸**：默认 4:5（1080×1350，现有尺寸）/ 方图 1:1（1080×1080，发 X 时间线）/
+  宽图 16:9（1280×720）/ 长图 9:16（1080×1920，手机转发）。
+- **内容开关**：回购数据 / 社区热度（取首页社区热度第一条推文，无数据时不可选）/
+  一句话结论（只有日报分享时可选）/ 来源水印（`buildaster.xyz`，默认隐藏）。
+- **自定义一句话**：输入一行文字（最多 60 字），加到图上。
+- 不做自由拖拽排版。选项存在浏览器 localStorage（`aster-pulse-share-opts`），
+  下次打开弹窗保持上次选择。
+
+默认选项（浅色 + 默认 4:5 + 只开回购数据）走旧绘制代码原样复现，默认图行为不变；
+改了任何选项才走自适应布局：宽图用紧凑横向布局（不放社区热度），其余尺寸用流式布局，
+空间不够时优先跳过社区热度。快速连点选项时绘制串行化，预览只保留最新一次选项的结果，
+不会停留在旧图；三列紧凑布局里过长的回购数字自动缩小字号，不会互相重叠。删除：删掉弹窗里的设置区块 + `<style>` 里的
+`SHARE CUSTOM` 段 + CLIENT 里的 `SHARE CUSTOM` 段即恢复只有默认图。
 
 ## 服务器
 

@@ -14,3 +14,72 @@ async function tokenStats(env){const [priceRes,stakeRes]=await Promise.allSettle
 async function marketDetail(env,symbol){if(!/^[\p{L}\p{N}_]{1,40}$/u.test(symbol))throw Error('币种参数无效');return cached(env,'market-detail-'+encodeURIComponent(symbol)+'.json',30000,async()=>{const [ticker,oi]=await Promise.allSettled([remote(HOST+'ticker/24hr?'+new URLSearchParams({symbol})),remote(HOST+'openInterest?'+new URLSearchParams({symbol}))]);const t=ticker.status==='fulfilled'?ticker.value:null,o=oi.status==='fulfilled'?oi.value:null;const valid=v=>v!=null&&v!==''&&Number.isFinite(Number(v));return {symbol,price:valid(t?.lastPrice)?t.lastPrice:null,change24:Number(t?.openPrice)>0&&Number(t?.lastPrice)>0?(Number(t.lastPrice)/Number(t.openPrice)-1)*100:null,quoteVolume:valid(t?.quoteVolume)?t.quoteVolume:null,baseVolume:valid(t?.volume)?t.volume:null,tickerTime:t?.closeTime??null,openInterest:valid(o?.openInterest)&&Number(o.openInterest)>=0?o.openInterest:null,interestTime:o?.time??null,tickerError:t?null:(ticker.reason?.message||'行情暂不可用'),interestError:valid(o?.openInterest)?null:(oi.reason?.message||'未平仓量暂不可用'),source:HOST}})}
 
 async function activities(env){return cached(env,'activities.json',60000,async()=>{const r=await remote('https://www.asterdex.com/bapi/composite/v1/public/composite/ae/announcement/search',{page:1,size:12,category:'ACTIVITY'});if(!Array.isArray(r.data?.rows))throw Error('活动公告格式异常');return {rows:r.data.rows.filter(x=>x.category==='ACTIVITY').map(x=>({id:x.id,title:x.title,subtitle:x.subtitle||'',publishTime:x.publishTime})).sort((a,b)=>b.publishTime-a.publishTime),source:'Aster 官方活动公告',total:r.data.total}})}
+
+// ===== BEGIN DAILY BRIEF =====
+// 每日异动日报（app/worker.js 里 dailyBrief() 的可读版，改了不生效）。
+// 异动分（0-100）只用现有数据算，不编造 1h 数据：
+//   涨幅分（50）= min(50, change24 * 0.125)
+//   成交额分（20）= min(20, 4 * log10(quoteVolume / 10000))
+//   资金费率分（15）= min(15, |fundingRate - 0.0001| * 1000)
+//   领先分（15）= min(15, (change1 - change2) * 0.05)
+const BRIEF_DINO=['XLM','XTZ','LTC','ZEC'];
+const BRIEF_EVENTS=[
+{date:'2026-11-10',zh:{title:'JCT 上币币安 Alpha + 合约',note:'同日约 11.8 亿枚解锁（约占流通 10%）'},en:{title:'JCT lists on Binance Alpha + futures',note:'~1.18B unlock the same day (~10% of circulating supply)'}},
+{date:'2026-11-16',zh:{title:'ASTER 下次销毁（约）',note:'每两周一次 · 目标总量 80 亿 → 30 亿'},en:{title:'ASTER next burn (approx.)',note:'Every two weeks · supply target 8B → 3B'}},
+];
+const BRIEF_BURN_CYCLE={period:'2026-10-19–11-02',qty:2604529.88};
+function briefScore(t,second){
+const chg=Math.max(0,Number(t.change24)||0);
+const vol=Math.max(0,Number(t.volume)||0);
+const round1=v=>Math.round(v*10)/10;
+const parts={
+change:round1(Math.min(50,chg*0.125)),
+volume:round1(Math.max(0,Math.min(20,4*Math.log10(Math.max(1,vol)/10000)))),
+funding:t.fundingRate!=null?round1(Math.min(15,Math.abs(Number(t.fundingRate)-0.0001)*1000)):0,
+gap:second!=null?round1(Math.min(15,Math.max(0,chg-Number(second.change24||0))*0.05)):0,
+};
+return {score:Math.round(parts.change+parts.volume+parts.funding+parts.gap),parts};
+}
+function briefVerdict(t){
+if(!t||t.change24==null)return 'quiet';
+if(t.fundingRate!=null&&Number(t.fundingRate)>0.005)return 'overheated';
+if(Number(t.change24)>=100)return 'strong';
+if(Number(t.change24)>=20)return 'watch';
+return 'quiet';
+}
+async function dailyBrief(env){
+return cached(env,'daily-brief.json',300000,async()=>{
+const [m,b,ts]=await Promise.all([markets(env),buyback(env),tokenStats(env)]);
+const rows=Array.isArray(m.rows)?m.rows:[];
+const gainers=rows.filter(r=>r.status==='TRADING'&&Number(r.volume)>=100000&&r.change24!=null).sort((a,c)=>Number(c.change24)-Number(a.change24));
+const ranked=gainers.length?gainers:rows.filter(r=>r.change24!=null).sort((a,c)=>Number(c.change24)-Number(a.change24));
+const top=ranked[0]||null,second=ranked[1]||null;
+let fundingRate=null,fundingTime=null,openInterest=null,interestTime=null;
+if(top){
+const [frRes,oiRes]=await Promise.allSettled([remote(HOST+'premiumIndex?'+new URLSearchParams({symbol:top.symbol})),remote(HOST+'openInterest?'+new URLSearchParams({symbol:top.symbol}))]);
+if(frRes.status==='fulfilled'&&frRes.value&&Number.isFinite(Number(frRes.value.lastFundingRate))){fundingRate=Number(frRes.value.lastFundingRate);fundingTime=frRes.value.time||null}
+if(oiRes.status==='fulfilled'&&oiRes.value&&oiRes.value.openInterest!=null){openInterest=oiRes.value.openInterest;interestTime=oiRes.value.time||null}
+}
+const topOut=top?{symbol:top.symbol,name:top.name,price:top.price,change24:top.change24,volume:top.volume,fundingRate,fundingTime,openInterest,interestTime}:null;
+const {score,parts}=topOut?briefScore(topOut,second):{score:0,parts:{change:0,volume:0,funding:0,gap:0}};
+const byName=new Map(rows.map(r=>[r.name,r]));
+const dino=BRIEF_DINO.map(n=>byName.get(n)).filter(Boolean).map(r=>({name:r.name,symbol:r.symbol,price:r.price,change24:r.change24,volume:r.volume}));
+const todayBjs=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+const events=BRIEF_EVENTS.filter(e=>e.date>=todayBjs);
+const days=Array.isArray(b.days)?b.days:[];
+const today=days.at(-1)||null,yesterday=days.at(-2)||null;
+return {
+date:todayBjs,
+top:topOut,
+top5:ranked.slice(0,5).map(r=>({symbol:r.symbol,name:r.name,price:r.price,change24:r.change24,volume:r.volume})),
+secondGap:second?Number(top.change24)-Number(second.change24):null,
+newest:rows[0]?{symbol:rows[0].symbol,name:rows[0].name,onboard:rows[0].onboard,change24:rows[0].change24}:null,
+score,scoreParts:parts,verdict:briefVerdict(topOut),
+dino,events,
+buyback:{todayQty:today?today.qty:null,todaySpent:today?today.spent:null,yesterdayQty:yesterday?yesterday.qty:null,weekQty:days.reduce((s,x)=>s+Number(x.qty||0),0),burned:ts.burned!=null?ts.burned:null,burnCycle:BRIEF_BURN_CYCLE},
+aster:{price:ts.price,change24:ts.change24},
+source:'fapi.asterdex.com (markets/token-stats) + tapi.asterdex.com (buyback) + CoinGecko (burned)',
+};
+});
+}
+// ===== END DAILY BRIEF =====
