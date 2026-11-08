@@ -207,7 +207,7 @@ test('GET /api/buyback 返回 7 天回购统计', { timeout: SLOW_TIMEOUT }, asy
   assert.equal(typeof body.stale, 'boolean');
 });
 
-test('GET /api/daily-brief 返回日报结构', { timeout: SLOW_TIMEOUT }, async () => {
+test('GET /api/daily-brief 返回每日异动结构', { timeout: SLOW_TIMEOUT }, async () => {
   const { status, body, raw } = await getJSON('/api/daily-brief', { timeoutMs: 170_000 });
   assert.equal(status, 200, `daily-brief 应返回 200，实际 ${status}，body：${raw}`);
   assert.match(body.date, /^\d{4}-\d{2}-\d{2}$/, `date 应为 YYYY-MM-DD，实际 ${body.date}`);
@@ -226,8 +226,20 @@ test('GET /api/daily-brief 返回日报结构', { timeout: SLOW_TIMEOUT }, async
     `verdict 应为四种之一，实际 ${body.verdict}`);
   assert.ok(Array.isArray(body.dino), 'dino 应为数组');
   assert.ok(Array.isArray(body.events), 'events 应为数组');
-  assert.equal(typeof body.buyback, 'object');
-  assert.equal(typeof body.buyback.weekQty, 'number');
+  assert.ok(Array.isArray(body.ideas), 'ideas 应为数组');
+  assert.ok(body.ideas.length <= 3, `ideas 最多 3 条，实际 ${body.ideas.length}`);
+  for (const it of body.ideas) {
+    assert.equal(typeof it.symbol, 'string');
+    assert.ok(['noChase', 'tryLong', 'watch', 'none'].includes(it.idea.direction),
+      `idea.direction 应为四种之一，实际 ${it.idea.direction}`);
+    assert.equal(typeof it.idea.reason.zh, 'string');
+    assert.equal(typeof it.idea.reason.en, 'string');
+    for (const k of ['entry', 'stop', 'target']) {
+      assert.ok(it.idea[k] === null || typeof it.idea[k] === 'number',
+        `idea.${k} 应为数字或 null，实际 ${it.idea[k]}`);
+    }
+  }
+  assert.ok(!('buyback' in body) && !('aster' in body), '异动里不应再含回购/ASTER 字段');
   assert.equal(typeof body.stale, 'boolean');
   assert.equal(typeof body.updatedAt, 'number');
 });
@@ -251,10 +263,10 @@ test('POST /api/refresh 无 token 时返回 405', { timeout: FAST_TIMEOUT }, asy
 
 // ---------------------------------------------------------------------------
 // /api/daily-brief 的 mock 上游单测：直接调 app/worker.js 的 fetch，
-// 上游 fetch 全部 stub，不碰真实网络。断言只认结构与异动分公式，
-// 不写死价格。DAILY_BRIEF_ENABLED=false 时接口应返回 404。
+// 上游 fetch 全部 stub，不碰真实网络。断言只认结构、异动分公式与
+// 开单思路规则，不写死价格。DAILY_BRIEF_ENABLED=false 时接口应返回 404。
 // ---------------------------------------------------------------------------
-test('GET /api/daily-brief（mock 上游）返回聚合结构与异动分', async () => {
+test('GET /api/daily-brief（mock 上游）返回聚合结构、异动分与开单思路', async () => {
   const worker = (await import('../app/worker.js')).default;
   const store = new Map();
   const env = {
@@ -272,33 +284,37 @@ test('GET /api/daily-brief（mock 上游）返回聚合结构与异动分', asyn
     { symbol: 'XLMUSDT', baseAsset: 'XLM', quoteAsset: 'USDT', status: 'TRADING', onboardDate: now - 3 * 86400000 },
   ] };
   const tickers = [
-    { symbol: 'JCTUSDT', lastPrice: '0.012', openPrice: '0.0027', quoteVolume: '23000000' },
-    { symbol: 'STONKBROKERUSDT', lastPrice: '0.0078', openPrice: '0.0056', quoteVolume: '500000' },
-    { symbol: 'XLMUSDT', lastPrice: '0.5', openPrice: '0.45', quoteVolume: '5000000' },
+    { symbol: 'JCTUSDT', lastPrice: '0.012', openPrice: '0.0027', highPrice: '0.0154', lowPrice: '0.0023', quoteVolume: '23000000', closeTime: now },
+    { symbol: 'STONKBROKERUSDT', lastPrice: '0.0078', openPrice: '0.0056', highPrice: '0.0082', lowPrice: '0.0054', quoteVolume: '500000', closeTime: now },
+    { symbol: 'XLMUSDT', lastPrice: '0.5', openPrice: '0.45', highPrice: '0.52', lowPrice: '0.44', quoteVolume: '5000000', closeTime: now },
   ];
+  const fundingBySymbol = { JCTUSDT: '0.0135', STONKBROKERUSDT: '0.0002', XLMUSDT: '0.0001' };
   const origFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
     const u = String(url);
     const ok = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
     if (u.includes('exchangeInfo')) return ok(exchangeInfo);
     if (u.includes('ticker/24hr')) {
-      if (u.includes('ASTERUSDT')) return ok({ lastPrice: '0.68', priceChangePercent: '1.0', closeTime: now });
+      const m = u.match(/symbol=([A-Z0-9_]+)/);
+      if (m) { const one = tickers.find(t => t.symbol === m[1]); if (one) return ok(one); }
       return ok(tickers);
     }
-    if (u.includes('premiumIndex')) return ok({ symbol: 'JCTUSDT', lastFundingRate: '0.0135', time: now });
+    if (u.includes('premiumIndex')) {
+      const m = u.match(/symbol=([A-Z0-9_]+)/);
+      const sym = m ? m[1] : 'JCTUSDT';
+      return ok({ symbol: sym, lastFundingRate: fundingBySymbol[sym] ?? '0.0001', time: now });
+    }
     if (u.includes('openInterest')) return ok({ symbol: 'JCTUSDT', openInterest: '753936743', time: now });
-    if (u.includes('tapi.asterdex.com')) return ok({ result: { fills: [], accountPrivacy: 'disabled' } });
-    if (u.includes('api.llama.fi')) return ok({ chainTvls: { staking: { tvl: [{ date: Math.floor(now / 1000), totalLiquidityUSD: 350000000 }] } } });
-    if (u.includes('api.coingecko.com')) return ok({ market_data: { total_supply: 7787306410 }, last_updated: new Date(now).toISOString() });
     throw new Error('mock 未覆盖的上游: ' + u);
   };
   try {
     const res = await worker.fetch(new Request('http://localhost/api/daily-brief'), env, {});
-    assert.equal(res.status, 200, `mock 日报应返回 200，实际 ${res.status}`);
+    assert.equal(res.status, 200, `mock 异动应返回 200，实际 ${res.status}`);
     const body = await res.json();
     assert.equal(body.top.name, 'JCT', `涨幅第一应为 JCT，实际 ${body.top?.name}`);
     assert.equal(body.top.fundingRate, 0.0135, `资金费率应为 0.0135，实际 ${body.top.fundingRate}`);
     assert.equal(body.top.openInterest, '753936743');
+    assert.equal(body.top.highPrice, '0.0154', `日内高点应为 0.0154，实际 ${body.top.highPrice}`);
     assert.equal(body.verdict, 'overheated', `资金费率 1.35% 时结论应为 overheated，实际 ${body.verdict}`);
     // JCT +344.4%：涨幅分 43.1 + 成交额分 13.4 + 资金费率分 13.4 + 领先分 15 ≈ 85
     assert.ok(body.score >= 80 && body.score <= 90, `score 应在 80-90，实际 ${body.score}`);
@@ -306,9 +322,24 @@ test('GET /api/daily-brief（mock 上游）返回聚合结构与异动分', asyn
     assert.equal(body.top5[1].name, 'STONKBROKER');
     assert.equal(body.dino.length, 1, `老币观察只应命中 XLM，实际 ${JSON.stringify(body.dino)}`);
     assert.equal(body.dino[0].name, 'XLM');
-    assert.equal(typeof body.buyback.weekQty, 'number');
-    assert.equal(body.buyback.burned, 8000000000 - 7787306410);
+    assert.ok(!('buyback' in body) && !('aster' in body), '异动里不应再含回购/ASTER 字段');
     assert.ok(Array.isArray(body.events), 'events 应为数组');
+    // 开单思路：JCT 费率 1.35% 过热 → 不追多；STONKBROKER +39.3% 费率正常 → 观望；XLM +11.1% → 暂无思路
+    assert.equal(body.ideas.length, 3, `ideas 应为 3 条，实际 ${body.ideas.length}`);
+    const [jct, stonk, xlm] = body.ideas;
+    assert.equal(jct.idea.direction, 'noChase', `JCT 方向应为 noChase，实际 ${jct.idea.direction}`);
+    assert.equal(jct.idea.entry, 0.01309, `JCT 回踩位应为高点 0.0154×0.85，实际 ${jct.idea.entry}`);
+    assert.equal(jct.idea.stop, 0.01217, `JCT 止损应为回踩位×0.93，实际 ${jct.idea.stop}`);
+    assert.equal(jct.idea.target, 0.01694, `JCT 目标应为高点×1.10，实际 ${jct.idea.target}`);
+    assert.match(jct.idea.reason.zh, /1\.35%/, `JCT 理由应带资金费率，实际 ${jct.idea.reason.zh}`);
+    assert.equal(stonk.idea.direction, 'watch', `STONKBROKER 方向应为 watch，实际 ${stonk.idea.direction}`);
+    assert.equal(stonk.idea.entry, 0.0082, `STONKBROKER 突破位应为日内高点，实际 ${stonk.idea.entry}`);
+    assert.equal(stonk.idea.stop, 0.005292, `STONKBROKER 止损应为低点×0.98，实际 ${stonk.idea.stop}`);
+    assert.equal(stonk.idea.target, 0.00984, `STONKBROKER 目标应为高点×1.20，实际 ${stonk.idea.target}`);
+    assert.equal(xlm.idea.direction, 'none', `XLM 方向应为 none，实际 ${xlm.idea.direction}`);
+    assert.equal(xlm.idea.entry, null);
+    assert.equal(xlm.idea.stop, null);
+    assert.equal(xlm.idea.target, null);
     // 代志关闭时返回 404
     const res404 = await worker.fetch(new Request('http://localhost/api/daily-brief'), { ...env, DAILY_BRIEF_ENABLED: false }, {});
     assert.equal(res404.status, 404, `代志关闭时应返回 404，实际 ${res404.status}`);
