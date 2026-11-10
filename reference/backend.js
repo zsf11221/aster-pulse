@@ -27,16 +27,16 @@ async function activities(env){return cached(env,'activities.json',60000,async()
 // 取不到就省略该项）：
 //   资金费率 > 0.5% 或 24h 涨幅 ≥ 200% → 不追多：回踩位 = 日内高点 × 0.85；
 //     止损 = 回踩位 × 0.93；目标 = 日内高点 × 1.10。
-//   24h 涨幅 ≥ 50%（费率正常）→ 轻仓试多：回踩位 = min(现价, 日内高点 × 0.90)；
+//   24h 涨幅 ≥ 50%（费率未过热，即 ≤0.5%）→ 轻仓试多：回踩位 = min(现价, 日内高点 × 0.90)；
 //     止损 = 日内低点 × 0.98；目标 = 日内高点 × 1.15。
-//   24h 涨幅 ≥ 20%（费率正常）→ 观望：突破位 = 日内高点；
+//   24h 涨幅 ≥ 20%（费率未过热，即 ≤0.5%）→ 观望：突破位 = 日内高点；
 //     止损 = 日内低点 × 0.98；目标 = 日内高点 × 1.20。
 //   其余 → 暂无思路（不给点位）。
 // 持仓量是单点快照、无变化趋势，只展示不参与方向判断；与第二名差距只影响
 // 异动分，不参与开单判断。点位按 4 位有效数字取整。
 const BRIEF_DINO=['XLM','XTZ','LTC','ZEC'];
 const BRIEF_EVENTS=[
-{date:'2026-11-10',zh:{title:'JCT 上币币安 Alpha + 合约',note:'同日约 11.8 亿枚解锁（约占流通 10%）'},en:{title:'JCT lists on Binance Alpha + futures',note:'~1.18B unlock the same day (~10% of circulating supply)'}},
+{date:'2026-11-10',zh:{title:'JCT 月度解锁开启（时间表有争议）',note:'DropsTab 称从今日起每月约 11.8 亿枚，但也有追踪器称首笔可能在 12 月 10 日或仅约 1229 万枚，未核实'},en:{title:'JCT monthly unlocks begin (schedule disputed)',note:'DropsTab says ~1.18B/month from today, but other trackers say the first unlock may be Dec 10 or only ~12.29M — unverified'}},
 ];
 function briefSig(v){
   if(v==null||!Number.isFinite(Number(v)))return null;
@@ -61,7 +61,7 @@ function briefIdea(c){
   if(chg>=50){
     const entry=okHigh?briefSig(Math.min(okPrice?price:Infinity,high*0.90)):null;
     return {direction:'tryLong',entry,stop:okLow?briefSig(low*0.98):null,target:okHigh?briefSig(high*1.15):null,
-      reason:{zh:'放量大涨、费率正常，回踩分批试多。',en:'Strong surge on volume with normal funding — try a light long on pullback.'}};
+      reason:fund!=null?{zh:'放量大涨、资金费率 '+(fund*100).toFixed(2)+'%，回踩分批试多。',en:'Strong surge on volume, funding '+(fund*100).toFixed(2)+'% — try a light long on pullback.'}:{zh:'放量大涨、费率正常，回踩分批试多。',en:'Strong surge on volume with normal funding — try a light long on pullback.'}};
   }
   if(chg>=20){
     return {direction:'watch',entry:okHigh?briefSig(high):null,stop:okLow?briefSig(low*0.98):null,target:okHigh?briefSig(high*1.20):null,

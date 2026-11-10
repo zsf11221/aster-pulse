@@ -324,7 +324,7 @@ test('GET /api/daily-brief（mock 上游）返回聚合结构、异动分与开�
     assert.equal(body.dino[0].name, 'XLM');
     assert.ok(!('buyback' in body) && !('aster' in body), '异动里不应再含回购/ASTER 字段');
     assert.ok(Array.isArray(body.events), 'events 应为数组');
-    // 开单思路：JCT 费率 1.35% 过热 → 不追多；STONKBROKER +39.3% 费率正常 → 观望；XLM +11.1% → 暂无思路
+    // 开单思路：JCT 费率 1.35% 过热 → 不追多；STONKBROKER +39.3% 费率未过热（0.02%）→ 观望；XLM +11.1% → 暂无思路
     assert.equal(body.ideas.length, 3, `ideas 应为 3 条，实际 ${body.ideas.length}`);
     const [jct, stonk, xlm] = body.ideas;
     assert.equal(jct.idea.direction, 'noChase', `JCT 方向应为 noChase，实际 ${jct.idea.direction}`);
